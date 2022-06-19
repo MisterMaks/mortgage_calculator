@@ -1,0 +1,5 @@
+venv_mortgage_calculator
+Расчет платежей по ипотеке.csv
+*.log
+mortgage_calculator_bot.py
+.idea
