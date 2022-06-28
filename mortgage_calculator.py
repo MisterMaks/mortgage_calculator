@@ -93,6 +93,7 @@ def save_in_csv(
         user_input_data_json: Dict[str, Union[int, float, str]],
         mortgage_monthly_payments: float,
         mortgage_months_period: int,
+        overpayment: float,
         mortgage_monthly_payments_data_json: List[Dict[str, Union[int, float]]],
         mortgage_monthly_payments_2: Union[float, None] = None
 ):
@@ -116,11 +117,20 @@ def save_in_csv(
 
         writer = csv.writer(f)
         if not mortgage_monthly_payments_2:
-            writer.writerow(['Ежемесячный платеж', 'Срок ипотеки (в месяцах)'])
-            writer.writerow([round(mortgage_monthly_payments, 3), f'{mortgage_months_period} месяц/месяцев ({mortgage_months_period // 12} год/лет и {mortgage_months_period % 12} месяц/месяцев)'])
+            writer.writerow(['Ежемесячный платеж', 'Срок ипотеки (в месяцах)', 'Переплата банку'])
+            writer.writerow([
+                round(mortgage_monthly_payments, 3),
+                f'{mortgage_months_period} месяц/месяцев ({mortgage_months_period // 12} год/лет и {mortgage_months_period % 12} месяц/месяцев)',
+                round(overpayment, 3),
+            ])
         else:
-            writer.writerow(['Ежемесячный платеж в 1-ый год', 'Ежемесячный платеж со 2-ого года', 'Срок ипотеки (в месяцах)'])
-            writer.writerow([round(mortgage_monthly_payments, 3), round(mortgage_monthly_payments_2, 3), f'{mortgage_months_period} месяц/месяцев ({mortgage_months_period // 12} год/лет и {mortgage_months_period % 12} месяц/месяцев)'])
+            writer.writerow(['Ежемесячный платеж в 1-ый год', 'Ежемесячный платеж со 2-ого года', 'Срок ипотеки (в месяцах)', 'Переплата банку'])
+            writer.writerow([
+                round(mortgage_monthly_payments, 3),
+                round(mortgage_monthly_payments_2, 3),
+                f'{mortgage_months_period} месяц/месяцев ({mortgage_months_period // 12} год/лет и {mortgage_months_period % 12} месяц/месяцев)',
+                round(overpayment, 3),
+            ])
 
         writer = csv.DictWriter(f, fieldnames=mortgage_monthly_payments_data_json[0].keys())
         writer.writerow({
@@ -172,11 +182,12 @@ def mortgage_time_calculation(
         mortgage_percents_1: float,
         mortgage_percents_2: float,
         mortgage_monthly_payments: float,
-) -> Tuple[List[MortgageMonthlyPaymentData], int]:
+) -> Tuple[List[MortgageMonthlyPaymentData], int, float]:
     logger.info('Calculation mortgage time')
     print('Расчет срока ипотеки в зависимости от ежемесячных платежей')
     count_months = 0
     mortgage_monthly_payments_data = []
+    overpayment = 0
     while mortgage_amount:
         mortgage_amount_previous = mortgage_amount
         count_months += 1
@@ -191,6 +202,7 @@ def mortgage_time_calculation(
             mortgage_monthly_payments = mortgage_amount
         payment_debt_val = mortgage_monthly_payments - mortgage_percents_val
         mortgage_amount -= mortgage_monthly_payments
+        overpayment += mortgage_percents_val
         if mortgage_amount > mortgage_amount_previous:
             logger.error('With such user inputs mortgage will rise')
             print('При таких параметрах ипотека будет расти')
@@ -198,8 +210,8 @@ def mortgage_time_calculation(
         mortgage_monthly_payment_data = MortgageMonthlyPaymentData(count_months, mortgage_debt, mortgage_percents_val, mortgage_percents, payment_debt_val, mortgage_monthly_payments)
         mortgage_monthly_payments_data.append(mortgage_monthly_payment_data)
         print(mortgage_monthly_payment_data.get_str())
-    print(f'Кол-во месяцев: {count_months} ({count_months//12} года/лет и {count_months % 12} месяц/месяцев)')
-    return mortgage_monthly_payments_data, count_months
+    print(f'Кол-во месяцев: {count_months} ({count_months//12} года/лет и {count_months % 12} месяц/месяцев). Переплата банку: {round(overpayment, 3)}')
+    return mortgage_monthly_payments_data, count_months, overpayment
 
 
 def mortgage_payment_calculation(mortgage_amount: int, mortgage_percents_1: float, mortgage_percents_2: float, mortgage_month_period: int) -> Union[float, None]:
@@ -227,7 +239,12 @@ def mortgage_payment_calculation(mortgage_amount: int, mortgage_percents_1: floa
         return
 
 
-def mortgage_bank_calculation(mortgage_amount: int, mortgage_percents_1: float, mortgage_percents_2: float, mortgage_month_period: int) -> Tuple[List[MortgageMonthlyPaymentData], int, float, float]:
+def mortgage_bank_calculation(
+        mortgage_amount: int,
+        mortgage_percents_1: float,
+        mortgage_percents_2: float,
+        mortgage_month_period: int
+) -> Tuple[List[MortgageMonthlyPaymentData], int, float, float, float]:
     logger.info('Calculation mortgage as bank')
     print('Расчет ипотеки (как банк)')
     monthly_rate = (mortgage_percents_1 / (12 * 100))
@@ -237,6 +254,7 @@ def mortgage_bank_calculation(mortgage_amount: int, mortgage_percents_1: float, 
     mortgage_monthly_payments_2 = 0
     count_months = 0
     mortgage_monthly_payments_data = []
+    overpayment = 0
     while mortgage_amount:
         mortgage_amount_previous = mortgage_amount
         count_months += 1
@@ -252,6 +270,7 @@ def mortgage_bank_calculation(mortgage_amount: int, mortgage_percents_1: float, 
         mortgage_percents_val = (mortgage_amount * (mortgage_percents / 100)) / 12
         mortgage_debt = mortgage_amount
         mortgage_amount += mortgage_percents_val
+        overpayment += mortgage_percents_val
         if mortgage_amount < mortgage_monthly_payments:
             mortgage_monthly_payments = mortgage_amount
         payment_debt_val = mortgage_monthly_payments - mortgage_percents_val
@@ -263,8 +282,8 @@ def mortgage_bank_calculation(mortgage_amount: int, mortgage_percents_1: float, 
         mortgage_monthly_payment_data = MortgageMonthlyPaymentData(count_months, mortgage_debt, mortgage_percents_val, mortgage_percents, payment_debt_val, mortgage_monthly_payments)
         mortgage_monthly_payments_data.append(mortgage_monthly_payment_data)
         print(mortgage_monthly_payment_data.get_str())
-    print(f'Кол-во месяцев: {count_months} ({count_months // 12} года/лет и {count_months % 12} месяц/месяцев)')
-    return mortgage_monthly_payments_data, count_months, mortgage_monthly_payments_1, mortgage_monthly_payments_2
+    print(f'Кол-во месяцев: {count_months} ({count_months // 12} года/лет и {count_months % 12} месяц/месяцев). Переплата банку: {round(overpayment, 3)}')
+    return mortgage_monthly_payments_data, count_months, mortgage_monthly_payments_1, mortgage_monthly_payments_2, overpayment
 
 
 def main():
@@ -274,7 +293,7 @@ def main():
     if not user_input_data.check_data():
         return
     if user_input_data.mode == 1:
-        mortgage_monthly_payments_data, count_months = mortgage_time_calculation(
+        mortgage_monthly_payments_data, count_months, overpayment = mortgage_time_calculation(
             user_input_data.mortgage_amount,
             user_input_data.mortgage_percents_1,
             user_input_data.mortgage_percents_2,
@@ -285,7 +304,7 @@ def main():
             logger.error('No data for saving')
             print('Ошибка. Нет данных для сохранения. Проверьте введенные данные.')
             return
-        save_in_csv(PATH, asdict(user_input_data), user_input_data.mortgage_monthly_payments, count_months, mortgage_monthly_payments_data_json)
+        save_in_csv(PATH, asdict(user_input_data), user_input_data.mortgage_monthly_payments, count_months, overpayment, mortgage_monthly_payments_data_json)
     if user_input_data.mode == 2:
         mortgage_monthly_payments = mortgage_payment_calculation(
             user_input_data.mortgage_amount,
@@ -296,7 +315,7 @@ def main():
         if not mortgage_monthly_payments:
             return
         user_input_data.mortgage_monthly_payments = mortgage_monthly_payments
-        mortgage_monthly_payments_data, count_months = mortgage_time_calculation(
+        mortgage_monthly_payments_data, count_months, overpayment = mortgage_time_calculation(
             user_input_data.mortgage_amount,
             user_input_data.mortgage_percents_1,
             user_input_data.mortgage_percents_2,
@@ -307,9 +326,9 @@ def main():
             logger.error('No data for saving')
             print('Ошибка. Нет данных для сохранения. Проверьте введенные данные.')
             return
-        save_in_csv(PATH, asdict(user_input_data), user_input_data.mortgage_monthly_payments, count_months, mortgage_monthly_payments_data_json)
+        save_in_csv(PATH, asdict(user_input_data), user_input_data.mortgage_monthly_payments, count_months, overpayment, mortgage_monthly_payments_data_json)
     if user_input_data.mode == 3:
-        mortgage_monthly_payments_data, count_months, mortgage_monthly_payments_1, mortgage_monthly_payments_2 = mortgage_bank_calculation(
+        mortgage_monthly_payments_data, count_months, mortgage_monthly_payments_1, mortgage_monthly_payments_2, overpayment = mortgage_bank_calculation(
             user_input_data.mortgage_amount,
             user_input_data.mortgage_percents_1,
             user_input_data.mortgage_percents_2,
@@ -321,7 +340,7 @@ def main():
             logger.error('No data for saving')
             print('Ошибка. Нет данных для сохранения. Проверьте введенные данные.')
             return
-        save_in_csv(PATH, asdict(user_input_data), mortgage_monthly_payments_1, count_months, mortgage_monthly_payments_data_json, mortgage_monthly_payments_2)
+        save_in_csv(PATH, asdict(user_input_data), mortgage_monthly_payments_1, count_months, overpayment, mortgage_monthly_payments_data_json, mortgage_monthly_payments_2)
     return
 
 
